@@ -1,0 +1,171 @@
+#!/usr/bin/env python
+
+# kmus - Kyle's Music Migration Manager
+
+import sys
+import json
+import pathlib
+import subprocess
+import codecs
+import shutil
+import os
+from PIL import Image
+
+class Kmus():
+    def __init__(self):
+        pass
+
+    def show_help(self):
+        print("kmus v0.1 -- Kyle's Music Migration Manager")
+        print("")
+        print("USAGE:")
+        print("kmus [config]")
+        print("")
+        print("ARGS:")
+        print("[config] : the configuration file")
+
+    def __to_absolute(self, p):
+        pass
+
+    def __ts_different(self, first, second):
+        if second.exists():
+            return first.stat().st_mtime != second.stat().st_mtime
+        else:
+            return True
+
+    def __copy_ts(self, first, second):
+        times = first.stat()
+        os.utime(str(second), times=(times.st_atime, times.st_mtime))
+
+    def run(self, db):
+        json_db = open(db, "r")
+        self.db = json.load(json_db)
+        json_db.close()
+
+        self.genres = self.db["genres"]
+        self.config = self.db["config"]
+        #self.config["iroot"] = self.__to_absolute(self.config["iroot"], )
+        #self.config["oroot"] = self.__to_absolute(self.config["oroot"])
+
+
+        for ge in self.genres:
+            artists = ge["artists"]
+            for ar in artists:
+                albums = ar["albums"]
+                for al in albums:
+                    tracks = al["tracks"]
+                    for tr in tracks:
+                        self.__process_track(tr, al, ar, ge)
+
+    def __process_track(self, track, album, artist, genre):
+        # make sure that the source track exists
+        in_path = pathlib.Path(
+                self.config["iroot"],
+                genre["iprefix"],
+                artist["iprefix"],
+                album["iprefix"],
+                track
+        )
+        if not in_path.exists():
+            print("ERROR: {}\nSource file does not exist".format(str(in_path)))
+            exit(1)
+        else:
+            print(str(in_path))
+
+        # try to make the destination path
+        out_path = pathlib.Path(
+                self.config["oroot"],
+                genre.get("oprefix", genre["iprefix"]),
+                artist.get("oprefix", artist["iprefix"]),
+                album.get("oprefix", album["iprefix"]),
+                track
+        ).with_suffix("." + self.config["extension"])
+
+        # make sure that there is an album cover
+        album_art_path = None
+        for possible in self.config["art"]["accepted"]:
+            album_art = pathlib.Path(
+                    self.config["iroot"],
+                    genre["iprefix"],
+                    artist["iprefix"],
+                    album["iprefix"],
+                    possible
+            )
+            if album_art.exists():
+                album_art_path = album_art
+                break
+        if album_art_path is None:
+            print("    ERROR: No album art found.".format(str(in_path)))
+            exit(1)
+
+        # update cover if it's not latest
+        out_album_art_path = out_path.parent.joinpath(album_art_path.with_suffix("." + self.config["art"]["extension"]).name)
+        if out_album_art_path.exists() and self.__ts_different(album_art_path, out_album_art_path):
+            print("    Updating album art")
+            with Image.open(str(album_art_path)) as im:
+                im = im.convert("RGB")
+                im.thumbnail((
+                    self.config["art"]["size"],                    self.config["art"]["size"]
+                ))
+                im.save(out_album_art_path, self.config["art"]["codec"], quality=self.config["art"]["quality"])
+            self.__copy_ts(album_art_path, out_album_art_path)
+
+        # check if out_path is already latest
+        if not self.__ts_different(in_path, out_path):
+            print("    Already up to date. Skipping.")
+            return False
+        
+        # make sure that the track has replaygain
+        sproc_res = subprocess.run(["ffprobe", "-hide_banner", str(in_path)], check=True, capture_output=True)
+        if "REPLAYGAIN_TRACK_GAIN" not in codecs.decode(sproc_res.stderr):
+            print("    ERROR: Track has no replaygain tags.".format(str(in_path)))
+            exit(1)
+
+        # since things look fine, let's make sure the opath exists
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # then, let's actually convert it
+        cproc_res = subprocess.run([
+            "ffmpeg",
+            "-hide_banner",
+            "-v", "quiet",
+            "-stats",
+            "-y",
+            "-i",
+            str(in_path)
+        ] + self.config["codec"].split(" ") + [
+            str(out_path)
+        ], check=True, capture_output=False)
+        self.__copy_ts(in_path, out_path)
+
+        # copy album art if it is not there yet
+        if (not out_album_art_path.exists()) and self.__ts_different(album_art_path, out_album_art_path):
+            print("    Copying album art")
+            with Image.open(str(album_art_path)) as im:
+                im = im.convert("RGB")
+                im.thumbnail((
+                    self.config["art"]["size"],                    self.config["art"]["size"]
+                ))
+                im.save(out_album_art_path, self.config["art"]["codec"], quality=self.config["art"]["quality"])
+            self.__copy_ts(album_art_path, out_album_art_path)
+        
+        return True
+
+
+# ======================================
+
+if __name__ == '__main__':
+    kmus = Kmus()
+
+    if len(sys.argv) != 2:
+        kmus.show_help()
+        exit(1)
+    else:
+        kmus.run(sys.argv[1])
+
+#	title=
+#	infiledate="$(date -R -r "$line")"
+#	outfiledate=0
+#	if [ -f "$line" ]; then
+#	    outfiledate="$(date -R -r "
+#done < "$1"
