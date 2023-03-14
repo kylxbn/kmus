@@ -7,8 +7,10 @@
 kmus applies some restrictions to the music that it syncs.
 
 - Source file must have replay gain tags
-- Source album must have album art image (either `album.jpg` or `cover.jpg`)
-- Album art image must be less than or equal to 750 KB.
+- Source album must have album art image (such as `album.jpg` or `cover.jpg`)
+    - Configurable via the `db` file
+- Album art image is automatically scaled to 1024x1024 when needed, and copied as Q90 JPEG.
+    - Image format, resolution, and quality configurable via the `db` file
 
 ### Features
 
@@ -22,10 +24,10 @@ kmus applies some restrictions to the music that it syncs.
 ### Usage
 
 ```bash
-kmus \[db\]
+kmus [db]
 ```
 
-* **db** - the JSON database file
+* **db** - the JSON database file. Doesn't have to be named `db`, you can call it whatever you want.
 
 ### Example `db` file
 
@@ -35,21 +37,32 @@ kmus \[db\]
     "iroot": "/media/K_MUSIC/PCM",
     "oroot": "/home/kylxbn/Music/Portable",
     "codec": "-c:a libopus -b:a 190k -apply_phase_inv 0",
-    "extension": "opus"
+    "extension": "opus",
+    "art": {
+      "codec": "JPEG",
+      "extension": "jpeg",
+      "quality": 90,
+      "size": 1024,
+      "accepted": [
+        "album.jpg",
+        "cover.jpg",
+        "Cover.jpg",
+      ]
+    }
   },
   "genres": [
     {
       "iprefix": "Pop",
       "artists": [
         {
-	  "iprefix": "Rick Astley",
-	  "albums": [
-	    {
-	      "iprefix": "Whenever You Need Somebody",
-	      "tracks": [
-	        "01 Never Gonna Give You Up.wv"
-	      ]
-	    }
+          "iprefix": "Rick Astley",
+          "albums": [
+            {
+              "iprefix": "Whenever You Need Somebody",
+              "tracks": [
+                "01 Never Gonna Give You Up.wv"
+              ]
+            }
           ]
         }
       ]
