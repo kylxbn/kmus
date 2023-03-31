@@ -20,6 +20,11 @@ kmus applies some restrictions to the music that it syncs.
 - Keeps music tags but discards embedded album art. Avoid duplication of data when you can save it as one single album art image file.
 - Will not encode and copy a file if the origin file has not changed since last encoding (also applies to album art)
 - The database is a simple JSON file so you can edit it easily. No proprietary data storage here.
+- Will automatically remove files and folders in the destination folder that is not in the JSON database.
+    - This will of course not remove album art
+    - This will ignore folders in `iroot` that are in the `ignore_root` config setting because sometimes you just have to have those.
+- Will accept both video and audio files.
+    - Will convert the video file to audio only in case you do feed it a vidoe file.
 
 ### Usage
 
@@ -48,7 +53,10 @@ kmus [db]
         "cover.jpg",
         "Cover.jpg",
       ]
-    }
+    },
+    "ignore_root": [
+      ".stfolder"
+    ]
   },
   "genres": [
     {
@@ -74,6 +82,8 @@ kmus [db]
 It is pretty much self-explanatory.
 
 The `iroot` is the base path of your whole music collection. Likewise, the `oroot` is the base path of your portable music folder.
+
+The `ignore_root` array contains the folders that the autoremove feature should ignore when scanning the folders in your `iroot`.
 
 The `iprefix` key is the *input path* component. For example, the source song file in the example above is ultimately located in the path `/media/K_MUSIC/PCM/Pop/Rick Astley/Whenever You Need Somebody/01 Never Gonna Give You Up.wv`. By default, this will be transcoded to `/home/kylxbn/Music/Portable/Pop/Rick Astley/Whenever You Need Somebody/01 Never Gonna Give You Up.opus`. However, if you do need it, there is an option to specify an `oprefix` as well, when you want to customize the output path of the file. For example, if you add `"oprefix": "Meme King",` after `"iprefix": "Rick Astley",`, then the resulting path of the transcoded file will be `/home/kylxbn/Music/Portable/Pop/Meme King/Whenever You Need Somebody/01 Never Gonna Give You Up.wv`. You get the point by now, I hope.
 

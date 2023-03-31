@@ -16,7 +16,7 @@ class Kmus():
         pass
 
     def show_help(self):
-        print("kmus v0.1 -- Kyle's Music Migration Manager")
+        print("kmus v0.2 -- Kyle's Music Migration Manager")
         print("")
         print("USAGE:")
         print("kmus [config]")
@@ -47,6 +47,8 @@ class Kmus():
         #self.config["iroot"] = self.__to_absolute(self.config["iroot"], )
         #self.config["oroot"] = self.__to_absolute(self.config["oroot"])
 
+        # remove files/dirs not in json
+        self.__delete_files()
 
         for ge in self.genres:
             artists = ge["artists"]
@@ -56,6 +58,53 @@ class Kmus():
                     tracks = al["tracks"]
                     for tr in tracks:
                         self.__process_track(tr, al, ar, ge)
+
+    def __ask_delete(self, file):
+        r = input('Delete {}? [Y/n]'.format(str(file)))
+        if r == '' or r == 'Y' or r == 'y':
+            if file.is_dir():
+                shutil.rmtree(file)
+            elif file.is_file():
+                file.unlink()
+            else:
+                print("Unable to delete file!")
+                return
+
+            print('Deleted {}'.format(str(file)))
+    
+    def __delete_files(self):
+        # genres
+        available_genres = [x.get("oprefix", x["iprefix"]) for x in self.genres]
+        for f in [x for x in pathlib.Path(self.config.get("oroot", self.config["iroot"])).iterdir() if x.is_dir()]:
+            if (f.name not in available_genres) and (f.name not in self.config["ignore_root"]):
+                self.__ask_delete(f)
+        
+        # artists
+        for g in self.genres:
+            genre_path = pathlib.Path(self.config.get("oroot", self.config["iroot"]), g.get("oprefix", g["iprefix"]))
+            available_artists = [x.get("oprefix", x["iprefix"]) for x in g["artists"]]
+            for f in [x for x in genre_path.iterdir()]:
+                if f.name not in available_artists:
+                    self.__ask_delete(f)
+        
+        # albums
+        for g in self.genres:
+            for ar in g["artists"]:
+                artist_path = pathlib.Path(self.config.get("oroot", self.config["iroot"]), g.get("oprefix", g["iprefix"]), ar.get("oprefix", ar["iprefix"]))
+                available_albums = [x.get("oprefix", x["iprefix"]) for x in ar["albums"]]
+                for f in [x for x in artist_path.iterdir()]:
+                    if f.name not in available_albums:
+                        self.__ask_delete(f)
+        
+        # songs
+        for g in self.genres:
+            for ar in g["artists"]:
+                for al in ar["albums"]:
+                    album_path = pathlib.Path(self.config.get("oroot", self.config["iroot"]), g.get("oprefix", g["iprefix"]), ar.get("oprefix", ar["iprefix"]), al.get("oprefix", al["iprefix"]))
+                    available_songs = [pathlib.PurePath(x).with_suffix("." + self.config["extension"]).name for x in al["tracks"]]
+                    for f in [x for x in album_path.iterdir()]:
+                        if (f.name not in available_songs) and (f.name not in self.config["art"]["accepted"]):
+                            self.__ask_delete(f)
 
     def __process_track(self, track, album, artist, genre):
         # make sure that the source track exists
@@ -132,7 +181,8 @@ class Kmus():
             "-stats",
             "-y",
             "-i",
-            str(in_path)
+            str(in_path),
+            '-map', '0:a'
         ] + self.config["codec"].split(" ") + [
             str(out_path)
         ], check=True, capture_output=False)
