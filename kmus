@@ -9,6 +9,8 @@ import subprocess
 import codecs
 import shutil
 import os
+import re
+from datetime import datetime, timezone
 from PIL import Image
 
 class Kmus():
@@ -16,20 +18,24 @@ class Kmus():
         pass
 
     def show_help(self):
-        print("kmus v0.2 -- Kyle's Music Migration Manager")
+        print("kmus v0.3 -- Kyle's Music Migration Manager")
         print("")
         print("USAGE:")
-        print("kmus [config]")
+        print("kmus [config] [--alt]")
         print("")
         print("ARGS:")
         print("[config] : the configuration file")
+        print("[--alt]  : use the alt output codec settings")
 
     def __to_absolute(self, p):
         pass
 
     def __ts_different(self, first, second):
         if second.exists():
-            return first.stat().st_mtime != second.stat().st_mtime
+            ft = datetime.fromtimestamp(first.stat().st_mtime, tz=timezone.utc)
+            st = datetime.fromtimestamp(second.stat().st_mtime, tz=timezone.utc)
+            difference = ft - st
+            return abs(difference.total_seconds()) > 3
         else:
             return True
 
@@ -38,14 +44,10 @@ class Kmus():
         os.utime(str(second), times=(times.st_atime, times.st_mtime))
 
     def run(self, db):
-        json_db = open(db, "r")
-        self.db = json.load(json_db)
-        json_db.close()
+        self.db = db
 
         self.genres = self.db["genres"]
         self.config = self.db["config"]
-        #self.config["iroot"] = self.__to_absolute(self.config["iroot"], )
-        #self.config["oroot"] = self.__to_absolute(self.config["oroot"])
 
         # remove files/dirs not in json
         self.__delete_files()
@@ -169,9 +171,19 @@ class Kmus():
         
         # make sure that the track has replaygain
         sproc_res = subprocess.run(["ffprobe", "-hide_banner", str(in_path)], check=True, capture_output=True)
-        if "REPLAYGAIN_TRACK_GAIN" not in codecs.decode(sproc_res.stderr):
+        dec_text = codecs.decode(sproc_res.stderr)
+        trackgain = self.config["rg_preamp"]
+        albumgain = self.config["rg_preamp"]
+        if "REPLAYGAIN_TRACK_GAIN" not in dec_text:
             print("    ERROR: Track has no replaygain tags.".format(str(in_path)))
             exit(1)
+        else:
+            match = re.search("REPLAYGAIN_TRACK_GAIN: ([\-+]?\d+\.?\d+) dB", dec_text)
+            if match is not None:
+                trackgain += float(match.group(1))
+            match = re.search("REPLAYGAIN_ALBUM_GAIN: ([\-+]?\d+\.?\d+) dB", dec_text)
+            if match is not None:
+                albumgain += float(match.group(1))
 
         # since things look fine, let's make sure the opath exists
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -186,7 +198,7 @@ class Kmus():
             "-i",
             str(in_path),
             '-map', '0:a'
-        ] + self.config["codec"].split(" ") + [
+        ] + self.config["codec"].replace("|RG_TRACK|", str(trackgain)).replace("|RG_ALBUM|", str(albumgain)).split(" ") + [
             str(out_path)
         ], check=True, capture_output=False)
         self.__copy_ts(in_path, out_path)
@@ -197,7 +209,8 @@ class Kmus():
             with Image.open(str(album_art_path)) as im:
                 im = im.convert("RGB")
                 im.thumbnail((
-                    self.config["art"]["size"],                    self.config["art"]["size"]
+                    self.config["art"]["size"],
+                    self.config["art"]["size"]
                 ))
                 im.save(out_album_art_path, self.config["art"]["codec"], quality=self.config["art"]["quality"])
             self.__copy_ts(album_art_path, out_album_art_path)
@@ -210,15 +223,21 @@ class Kmus():
 if __name__ == '__main__':
     kmus = Kmus()
 
-    if len(sys.argv) != 2:
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
         kmus.show_help()
         exit(1)
     else:
-        kmus.run(sys.argv[1])
+        json_db = open(sys.argv[1], "r")
+        db = json.load(json_db)
+        json_db.close()
 
-#	title=
-#	infiledate="$(date -R -r "$line")"
-#	outfiledate=0
-#	if [ -f "$line" ]; then
-#	    outfiledate="$(date -R -r "
-#done < "$1"
+        if len(sys.argv) == 3 and sys.argv[2] == "--alt":
+            db["config"]["codec"] = db["config"]["alt"]["codec"]
+            db["config"]["extension"] = db["config"]["alt"]["extension"]
+            db["config"]["oroot"] = db["config"]["alt"]["oroot"]
+            db["config"]["rg_preamp"] = db["config"]["alt"]["rg_preamp"]
+        else:
+            kmus.show_help()
+            exit(1)
+
+        kmus.run(db)
