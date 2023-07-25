@@ -18,14 +18,13 @@ class Kmus():
         pass
 
     def show_help(self):
-        print("kmus v0.3 -- Kyle's Music Migration Manager")
-        print("")
         print("USAGE:")
-        print("kmus [config] [--alt]")
+        print("    kmus [db] [--alt [config]] ")
         print("")
         print("ARGS:")
-        print("[config] : the configuration file")
-        print("[--alt]  : use the alt output codec settings")
+        print("    [db]     : the database file (JSON)")
+        print("    [--alt]  : use a different output configuration")
+        print("    [config] : the output configuration to use")
 
     def __to_absolute(self, p):
         pass
@@ -135,34 +134,36 @@ class Kmus():
                 track
         ).with_suffix("." + self.config["extension"])
 
-        # make sure that there is an album cover
-        album_art_path = None
-        for possible in self.config["art"]["accepted"]:
-            album_art = pathlib.Path(
-                    self.config["iroot"],
-                    genre["iprefix"],
-                    artist["iprefix"],
-                    album["iprefix"],
-                    possible
-            )
-            if album_art.exists():
-                album_art_path = album_art
-                break
-        if album_art_path is None:
-            print("    ERROR: No album art found.".format(str(in_path)))
-            exit(1)
+        if self.config["copy_art"]:
+            # make sure that there is an album cover
+            album_art_path = None
+            for possible in self.config["art"]["accepted"]:
+                album_art = pathlib.Path(
+                        self.config["iroot"],
+                        genre["iprefix"],
+                        artist["iprefix"],
+                        album["iprefix"],
+                        possible
+                )
+                if album_art.exists():
+                    album_art_path = album_art
+                    break
+            if album_art_path is None:
+                print("    ERROR: No album art found.".format(str(in_path)))
+                exit(1)
 
-        # update cover if it's not latest
-        out_album_art_path = out_path.parent.joinpath(album_art_path.with_suffix("." + self.config["art"]["extension"]).name)
-        if out_album_art_path.exists() and self.__ts_different(album_art_path, out_album_art_path):
-            print("    Updating album art")
-            with Image.open(str(album_art_path)) as im:
-                im = im.convert("RGB")
-                im.thumbnail((
-                    self.config["art"]["size"],                    self.config["art"]["size"]
-                ))
-                im.save(out_album_art_path, self.config["art"]["codec"], quality=self.config["art"]["quality"])
-            self.__copy_ts(album_art_path, out_album_art_path)
+            # update cover if it's not latest
+            out_album_art_path = out_path.parent.joinpath(album_art_path.with_suffix("." + self.config["art"]["extension"]).name)
+            if out_album_art_path.exists() and self.__ts_different(album_art_path, out_album_art_path):
+                print("    Updating album art")
+                with Image.open(str(album_art_path)) as im:
+                    im = im.convert("RGB")
+                    im.thumbnail((
+                        self.config["art"]["size"],
+                        self.config["art"]["size"]
+                    ))
+                    im.save(out_album_art_path, self.config["art"]["codec"], quality=self.config["art"]["quality"])
+                self.__copy_ts(album_art_path, out_album_art_path)
 
         # check if out_path is already latest
         if not self.__ts_different(in_path, out_path):
@@ -172,24 +173,24 @@ class Kmus():
         # make sure that the track has replaygain
         sproc_res = subprocess.run(["ffprobe", "-hide_banner", str(in_path)], check=True, capture_output=True)
         dec_text = codecs.decode(sproc_res.stderr)
-        trackgain = self.config["rg_preamp"]
-        albumgain = self.config["rg_preamp"]
-        if "REPLAYGAIN_TRACK_GAIN" not in dec_text:
+        trackgain = 0.0
+        albumgain = 0.0
+        if "REPLAYGAIN_TRACK_GAIN" not in dec_text or "REPLAYGAIN_ALBUM_GAIN" not in dec_text:
             print("    ERROR: Track has no replaygain tags.".format(str(in_path)))
             exit(1)
         else:
             match = re.search("REPLAYGAIN_TRACK_GAIN: ([\-+]?\d+\.?\d+) dB", dec_text)
             if match is not None:
-                trackgain += float(match.group(1))
+                trackgain = float(match.group(1))
             match = re.search("REPLAYGAIN_ALBUM_GAIN: ([\-+]?\d+\.?\d+) dB", dec_text)
             if match is not None:
-                albumgain += float(match.group(1))
+                albumgain = float(match.group(1))
 
         # since things look fine, let's make sure the opath exists
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         # then, let's actually convert it
-        cproc_res = subprocess.run([
+        arguments = [
             "ffmpeg",
             "-hide_banner",
             "-v", "quiet",
@@ -198,22 +199,34 @@ class Kmus():
             "-i",
             str(in_path),
             '-map', '0:a'
-        ] + self.config["codec"].replace("|RG_TRACK|", str(trackgain)).replace("|RG_ALBUM|", str(albumgain)).split(" ") + [
-            str(out_path)
-        ], check=True, capture_output=False)
+        ] + self.config["codec"].split(" ")
+
+        if ("apply_rg" in self.config):
+            rggain = float(self.config["rg_preamp"]) if "rg_preamp" in self.config else 0.0
+            if self.config["apply_rg"].upper() == "TRACK":
+                rggain += trackgain
+            elif self.config["apply_rg"].upper() == "ALBUM":
+                rggain += albumgain
+            arguments.extend("-metadata REPLAYGAIN_TRACK_GAIN= -metadata REPLAYGAIN_ALBUM_GAIN= -metadata REPLAYGAIN_ALBUM_PEAK= -metadata REPLAYGAIN_TRACK_PEAK=".split(" "))
+            arguments.extend(("-af volume=precision=double:volume=" + str(rggain) + "dB").split(" "))
+
+        arguments.append(out_path)
+
+        cproc_res = subprocess.run(arguments, check=True, capture_output=False)
         self.__copy_ts(in_path, out_path)
 
-        # copy album art if it is not there yet
-        if (not out_album_art_path.exists()) and self.__ts_different(album_art_path, out_album_art_path):
-            print("    Copying album art")
-            with Image.open(str(album_art_path)) as im:
-                im = im.convert("RGB")
-                im.thumbnail((
-                    self.config["art"]["size"],
-                    self.config["art"]["size"]
-                ))
-                im.save(out_album_art_path, self.config["art"]["codec"], quality=self.config["art"]["quality"])
-            self.__copy_ts(album_art_path, out_album_art_path)
+        if self.config["copy_art"]:
+            # copy album art if it is not there yet
+            if (not out_album_art_path.exists()) and self.__ts_different(album_art_path, out_album_art_path):
+                print("    Copying album art")
+                with Image.open(str(album_art_path)) as im:
+                    im = im.convert("RGB")
+                    im.thumbnail((
+                        self.config["art"]["size"],
+                        self.config["art"]["size"]
+                    ))
+                    im.save(out_album_art_path, self.config["art"]["codec"], quality=self.config["art"]["quality"])
+                self.__copy_ts(album_art_path, out_album_art_path)
         
         return True
 
@@ -221,9 +234,18 @@ class Kmus():
 # ======================================
 
 if __name__ == '__main__':
+    print("kmus v1.0 -- Kyle's Music Migration Manager")
+    print("https://kmus.kylxbn.com/")
+    print("")
+    print("kmus  Copyright (C) 2023  Kyle Alexander Buan")
+    print("This program comes with ABSOLUTELY NO WARRANTY; for details, read LICENSE.txt file.")
+    print("This is free software, and you are welcome to redistribute it")
+    print("under certain conditions; read LICENSE.txt file for details.")
+    print("")
+
     kmus = Kmus()
 
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
+    if len(sys.argv) != 4 and len(sys.argv) != 2:
         kmus.show_help()
         exit(1)
     else:
@@ -231,13 +253,21 @@ if __name__ == '__main__':
         db = json.load(json_db)
         json_db.close()
 
-        if len(sys.argv) == 3 and sys.argv[2] == "--alt":
-            db["config"]["codec"] = db["config"]["alt"]["codec"]
-            db["config"]["extension"] = db["config"]["alt"]["extension"]
-            db["config"]["oroot"] = db["config"]["alt"]["oroot"]
-            db["config"]["rg_preamp"] = db["config"]["alt"]["rg_preamp"]
-        else:
-            kmus.show_help()
+        config = "default"
+
+        if len(sys.argv) == 4 and sys.argv[2] == "--alt":
+            config = sys.argv[3]
+
+        if  config not in db["config"]["output"]:
+            print(config + " config not found!")
             exit(1)
+
+        db["config"]["codec"] = db["config"]["output"][config]["codec"]
+        db["config"]["oroot"] = db["config"]["output"][config]["oroot"]
+        db["config"]["copy_art"] = db["config"]["output"][config]["copy_art"]
+        if "apply_rg" in db["config"]["output"][config]:
+            db["config"]["rg_preamp"] = db["config"]["output"][config]["rg_preamp"]
+            db["config"]["apply_rg"] = db["config"]["output"][config]["apply_rg"]
+        db["config"]["extension"] = db["config"]["output"][config]["extension"]
 
         kmus.run(db)
