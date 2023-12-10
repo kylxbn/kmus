@@ -175,16 +175,16 @@ class Kmus():
         dec_text = codecs.decode(sproc_res.stderr)
         trackgain = 0.0
         albumgain = 0.0
-        if "REPLAYGAIN_TRACK_GAIN" not in dec_text or "REPLAYGAIN_ALBUM_GAIN" not in dec_text:
+        if ("REPLAYGAIN_TRACK_GAIN" not in dec_text or "REPLAYGAIN_ALBUM_GAIN" not in dec_text) and ("replaygain_track_gain" not in dec_text or "replaygain_album_gain" not in dec_text):
             print("    ERROR: Track has no replaygain tags.".format(str(in_path)))
             exit(1)
         else:
-            match = re.search("REPLAYGAIN_TRACK_GAIN: ([\-+]?\d+\.?\d+) dB", dec_text)
+            match = re.search("(REPLAYGAIN_TRACK_GAIN|replaygain_track_gain): ([\-+]?\d+\.?\d+) dB", dec_text)
             if match is not None:
-                trackgain = float(match.group(1))
-            match = re.search("REPLAYGAIN_ALBUM_GAIN: ([\-+]?\d+\.?\d+) dB", dec_text)
+                trackgain = float(match.group(2))
+            match = re.search("(REPLAYGAIN_ALBUM_GAIN|replaygain_album_gain): ([\-+]?\d+\.?\d+) dB", dec_text)
             if match is not None:
-                albumgain = float(match.group(1))
+                albumgain = float(match.group(2))
 
         # since things look fine, let's make sure the opath exists
         out_path.parent.mkdir(parents=True, exist_ok=True)
