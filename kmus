@@ -179,10 +179,10 @@ class Kmus():
             print("    ERROR: Track has no replaygain tags.".format(str(in_path)))
             exit(1)
         else:
-            match = re.search("(REPLAYGAIN_TRACK_GAIN|replaygain_track_gain): ([\-+]?\d+\.?\d+) dB", dec_text)
+            match = re.search(r"(REPLAYGAIN_TRACK_GAIN|replaygain_track_gain): ([\-+]?\d+\.?\d+) dB", dec_text)
             if match is not None:
                 trackgain = float(match.group(2))
-            match = re.search("(REPLAYGAIN_ALBUM_GAIN|replaygain_album_gain): ([\-+]?\d+\.?\d+) dB", dec_text)
+            match = re.search(r"(REPLAYGAIN_ALBUM_GAIN|replaygain_album_gain): ([\-+]?\d+\.?\d+) dB", dec_text)
             if match is not None:
                 albumgain = float(match.group(2))
 
@@ -233,7 +233,7 @@ class Kmus():
 
 # ======================================
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("kmus v1.0 -- Kyle's Music Migration Manager")
     print("https://kmus.kylxbn.com/")
     print("")
@@ -249,7 +249,7 @@ if __name__ == '__main__':
         kmus.show_help()
         exit(1)
     else:
-        json_db = open(sys.argv[1], "r")
+        json_db = open(sys.argv[1], "r", encoding="UTF-8")
         db = json.load(json_db)
         json_db.close()
 
