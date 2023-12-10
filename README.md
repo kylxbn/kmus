@@ -124,6 +124,10 @@ See? That wasn't too difficult, was it?
 
 If you peek inside the source code, you'll notice that I manually set the volume filter instead of just using FFMPEG's built in ReplayGain mechanism when applyin ReplayGain to the audio data. For some reason, ffmpeg won't recognize the ReplayGain tags on my file even though ffprobe shows them, so I had to do a workaround.
 
+### Known Issues
+
+- Foobar2000 seems to ignore replaygain tags on Opus files. For Opus files, just use the `apply_rg` option to work around this while I investigate.
+
 ### License
 
 kmus - Kyle's Music Library Manager
