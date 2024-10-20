@@ -95,6 +95,10 @@ kmus db [--alt config_name]
               "tracks": [
                 "01 Never Gonna Give You Up.wv"
               ]
+            },
+            {
+              "iprefix": "Portrait",
+              "tracks": "*.flac"
             }
           ]
         }
@@ -117,12 +121,13 @@ It is pretty much self-explanatory.
         * The `rg_preamp` sets the preamp of ReplayGain values but this does not modify the tag value. Instead, this sets the preamp when you apply the ReplayGain to the audio itself. (see the explanation for the `codec` config below)
 * The `ignore_root` array contains the folders that the autoremove feature should ignore when scanning the folders in your `iroot`.
 * The `iprefix` key is the *input path* component. For example, the source song file in the example above is ultimately located in the path `/media/K_MUSIC/PCM/Pop/Rick Astley/Whenever You Need Somebody/01 Never Gonna Give You Up.wv`. By default, this will be transcoded to `/home/kylxbn/Music/Portable/Pop/Rick Astley/Whenever You Need Somebody/01 Never Gonna Give You Up.opus`. However, if you do need it, there is an option to specify an `oprefix` as well, when you want to customize the output path of the file. For example, if you add `"oprefix": "Meme King",` after `"iprefix": "Rick Astley",`, then the resulting path of the transcoded file will be `/home/kylxbn/Music/Portable/Pop/Meme King/Whenever You Need Somebody/01 Never Gonna Give You Up.wv`.
+* The `tracks` can either be a list of strings (list of filenames) or a string (a glob which will be used to build an actual list of filenames)
 
 See? That wasn't too difficult, was it?
 
 #### Why not just use `-af volume=replaygain=track`?
 
-If you peek inside the source code, you'll notice that I manually set the volume filter instead of just using FFMPEG's built in ReplayGain mechanism when applyin ReplayGain to the audio data. For some reason, ffmpeg won't recognize the ReplayGain tags on my file even though ffprobe shows them, so I had to do a workaround.
+If you peek inside the source code, you'll notice that I manually set the volume filter instead of just using FFMPEG's built in ReplayGain mechanism when applying ReplayGain to the audio data. For some reason, ffmpeg won't recognize the ReplayGain tags on my file even though ffprobe shows them, so I had to do a workaround.
 
 ### Known Issues
 

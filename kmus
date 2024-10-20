@@ -9,6 +9,7 @@ import subprocess
 import codecs
 import shutil
 import os
+import glob
 import re
 from datetime import datetime, timezone
 from PIL import Image
@@ -48,6 +49,8 @@ class Kmus():
         self.genres = self.db["genres"]
         self.config = self.db["config"]
 
+        self.__convert_globs()
+
         # remove files/dirs not in json
         self.__delete_files()
 
@@ -59,6 +62,19 @@ class Kmus():
                     tracks = al["tracks"]
                     for tr in tracks:
                         self.__process_track(tr, al, ar, ge)
+    
+    def __convert_globs(self):
+        for g in self.genres:
+            for ar in g["artists"]:
+                for al in ar["albums"]:
+                    album_path = pathlib.Path(self.config["iroot"], g["iprefix"], ar["iprefix"], al["iprefix"])
+                    if album_path.is_dir() and isinstance(al["tracks"], str):
+                        pattern = os.path.join(glob.escape(album_path), al["tracks"])
+                        matching_files = glob.glob(pattern)
+                        if len(matching_files) == 0:
+                            print("No files found for glob: " + pattern)
+                            exit()
+                        al["tracks"] = [os.path.basename(f) for f in matching_files]
 
     def __ask_delete(self, file):
         r = input('Delete {}? [Y/n]'.format(str(file)))
@@ -234,10 +250,10 @@ class Kmus():
 # ======================================
 
 if __name__ == "__main__":
-    print("kmus v1.0 -- Kyle's Music Migration Manager")
+    print("kmus v1.1 -- Kyle's Music Migration Manager")
     print("https://kmus.kylxbn.com/")
     print("")
-    print("kmus  Copyright (C) 2023  Kyle Alexander Buan")
+    print("kmus  Copyright (C) 2023-2024  Kyle Alexander Buan")
     print("This program comes with ABSOLUTELY NO WARRANTY; for details, read LICENSE.txt file.")
     print("This is free software, and you are welcome to redistribute it")
     print("under certain conditions; read LICENSE.txt file for details.")
